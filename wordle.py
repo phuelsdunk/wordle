@@ -71,7 +71,7 @@ def calcuate_entropy(patterns):
     counts = np.zeros([3 ** 5, len(corpus)], np.uint16)
     np.add.at(counts, (patterns, indexing), 1)
 
-    probs = counts / np.sum(counts, axis=0, keepdims=True)
+    probs = counts.astype(np.float16) / len(patterns)
     log_probs = np.log(probs, out=np.zeros_like(probs), where=counts > 0)
     return -np.sum(probs * log_probs, axis=0)
 
