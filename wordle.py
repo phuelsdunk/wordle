@@ -72,11 +72,21 @@ def calcuate_entropy(patterns):
     np.add.at(counts, (patterns, indexing), 1)
 
     probs = counts.astype(np.float16) / len(patterns)
-    log_probs = np.log(probs, out=np.zeros_like(probs), where=counts > 0)
-    return -np.sum(probs * log_probs, axis=0)
+    log_probs = -np.log(probs, out=np.zeros_like(probs), where=counts > 0)
+    return np.sum(probs * log_probs, axis=0)
 
 
 if __name__ == '__main__':
+    print(
+        "Wordle solver!\n"
+        "1. Enter a guess into Wordle and this Wordle solver.\n"
+        "2. Return the pattern from Wordle into here as a 5 digit code with "
+        "0=black, 1=yellow, 2=green. For example 00120, means "
+        "black-black-yellow-green-black.\n"
+        "3. The Wordle solver prints out remaining solutions and best "
+        "guesses. Repeat then from 1 until solution is found."
+    )
+
     with open('words', 'r') as f:
         corpus = [w[:-1] for w in f.readlines()]
         corpus = [w for w in corpus if len(w) == 5 and w.isalpha()]
@@ -85,48 +95,64 @@ if __name__ == '__main__':
 
     solution_indexes = np.arange(len(corpus))
     patterns = None
-    while len(solution_indexes) > 1:
-        if patterns is None:
-            guess = np.array(['tares']).view('U1')
-            guess_index = np.argmax(np.all(corpus == guess, axis=-1))
-        else:
-            entropy = calcuate_entropy(patterns)
-            guess_indexes, = np.where(entropy == np.max(entropy))
-            guess_in_solutions = np.in1d(guess_indexes, solution_indexes)
-            guess_index = guess_indexes[np.argmax(guess_in_solutions)]
-
-        guess = np.squeeze(corpus[guess_index].view('U5'))
+    suggested_guess = np.array(['tares']).view('U1')
+    while True:
+        print()
         while True:
-            pattern = input(f'guess={guess} - pattern=')
-            if len(pattern) in (0, 5):
+            suggested_guess_str = str(
+                np.squeeze(suggested_guess.view('U5'))
+            ).upper()
+            guess = input(f"I would like to guess [{suggested_guess_str}] ")
+            if len(guess) == 0:
+                guess = suggested_guess
+                break
+            if len(guess) == 5 and guess.isalpha():
+                guess = np.array([guess.lower()]).view('U1')
+                break
+        while True:
+            pattern = input("Enter a 5-digit code for the above guess "
+                            "(0=black, 1=yellow, 2=green) ")
+            if len(pattern) == 5 and all(ch in '012' for ch in pattern):
+                pattern = int(pattern, base=3)
                 break
 
-        if len(pattern) == 0:
-            corpus = np.delete(corpus, guess_index, axis=0)
+        if pattern == int('22222', base=3):
+            break
 
-            patterns = patterns[solution_indexes != guess_index]
-            patterns = np.delete(patterns, guess_index, axis=1)
+        patterns_given_guess = make_pattern(corpus[solution_indexes], guess)
+        mask = patterns_given_guess == pattern
+        solution_indexes = solution_indexes[mask]
 
-            solution_indexes = solution_indexes[solution_indexes != guess_index]
-            solution_indexes[solution_indexes > guess_index] -= 1
+        patterns = (
+            make_pattern(corpus[solution_indexes, None], corpus[None, :])
+            if patterns is None
+            else patterns[mask]
+        )
+        entropy = calcuate_entropy(patterns)
 
-        else:
-            pattern = int(pattern, base=3)
-            patterns_given_guess = (
-                make_pattern(corpus, corpus[guess_index])
-                if patterns is None
-                else patterns[:, guess_index]
-            )
-            mask = patterns_given_guess == pattern
-            solution_indexes = solution_indexes[mask]
+        print()
+        print(f"Possible solutions (n={len(solution_indexes)}):")
+        entropy_solutions = entropy[solution_indexes]
+        sorted_solution_indexes = solution_indexes[
+            np.argsort(entropy_solutions)
+        ]
+        for i, index in enumerate(sorted_solution_indexes[::-1]):
+            if i >= 10:
+                print('…')
+                break
+            word = np.squeeze(corpus[index].view('U5'))
+            print(f'{str(word).upper()} ({entropy[index]:.2f} bits)')
 
-            patterns = (
-                make_pattern(corpus[solution_indexes, None], corpus[None, :])
-                if patterns is None
-                else patterns[mask]
-            )
+        solution_mask = np.zeros_like(entropy, bool)
+        solution_mask[solution_indexes] = 1
+        sorted_indexes = np.lexsort((solution_mask, entropy))
+        print()
+        print("Top guesses:")
+        for i, index in enumerate(sorted_indexes[::-1]):
+            if i >= 10:
+                print('…')
+                break
+            word = np.squeeze(corpus[index].view('U5'))
+            print(f'{str(word).upper()} ({entropy[index]:.2f} bits)')
 
-        print(f'solutions={len(solution_indexes)}')
-
-    solution = np.squeeze(corpus[solution_indexes].view('U5'))
-    print(f'solution={solution}')
+        suggested_guess = corpus[sorted_indexes[-1]]
