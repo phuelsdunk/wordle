@@ -98,17 +98,23 @@ def filter_solutions(solutions, guess, pattern):
 if __name__ == '__main__':
     print("Wordle solver!")
 
-    with open('words', 'r') as f:
+    with open('official_wordle_all.txt', 'r') as f:
         corpus = [w[:-1] for w in f.readlines()]
         corpus = [w for w in corpus if len(w) == 5 and w.isalpha()]
         corpus = np.array(corpus, dtype=str)
         corpus = corpus.view('U1').reshape((-1, 5))
+    
+    with open('official_wordle_common.txt', 'r') as f:
+        solutions = [w[:-1] for w in f.readlines()]
+        solutions = [w for w in solutions if len(w) == 5 and w.isalpha()]
+        solutions = np.array(solutions, dtype=str)
+        solutions = solutions.view('U1').reshape((-1, 5))
 
-    solution_mask = np.ones(len(corpus), bool)
+    solution_mask = np.any(np.all(corpus[:, None, :] == solutions[None, :, :], axis=2), axis=1)
     patterns = None
     while True:
         if patterns is None:
-            suggested_guess = np.array(['tares']).view('U1')
+            suggested_guess = np.array(['soare']).view('U1')
 
         else:
             entropy = calcuate_entropy(patterns)
