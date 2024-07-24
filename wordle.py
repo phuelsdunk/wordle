@@ -100,17 +100,20 @@ if __name__ == '__main__':
 
     with open('official_wordle_all.txt', 'r') as f:
         corpus = [w[:-1] for w in f.readlines()]
-        corpus = [w for w in corpus if len(w) == 5 and w.isalpha()]
-        corpus = np.array(corpus, dtype=str)
-        corpus = corpus.view('U1').reshape((-1, 5))
-    
+        corpus = [w.lower() for w in corpus if len(w) == 5 and w.isalpha()]
+
     with open('official_wordle_common.txt', 'r') as f:
         solutions = [w[:-1] for w in f.readlines()]
-        solutions = [w for w in solutions if len(w) == 5 and w.isalpha()]
-        solutions = np.array(solutions, dtype=str)
-        solutions = solutions.view('U1').reshape((-1, 5))
+        solutions = {w.lower()
+                     for w in solutions if len(w) == 5 and w.isalpha()}
 
-    solution_mask = np.any(np.all(corpus[:, None, :] == solutions[None, :, :], axis=2), axis=1)
+    solution_mask = np.array([
+        word in solutions for word in corpus
+    ])
+
+    corpus = np.array(corpus, dtype=str)
+    corpus = corpus.view('U1').reshape((-1, 5))
+
     patterns = None
     while True:
         if patterns is None:
@@ -121,28 +124,44 @@ if __name__ == '__main__':
             sorted_indexes = np.lexsort((solution_mask, entropy))[::-1]
             suggested_guess = corpus[sorted_indexes[0]]
 
-            print()
-            print(f"Possible solutions (n={np.count_nonzero(solution_mask)}):")
+            num_solutions = np.count_nonzero(solution_mask)
             sorted_solution_indexes = sorted_indexes[
                 solution_mask[sorted_indexes]
             ]
-            for i, index in enumerate(sorted_solution_indexes):
-                if i >= 10:
-                    print('…')
-                    break
-                word = np.squeeze(corpus[index].view('U5'))
-                print(f'{str(word).upper()} ({entropy[index]:.2f} bits)')
+            solutions_fmt = [
+                f"{str(np.squeeze(corpus[index].view('U5'))).upper()}"
+                for index in sorted_solution_indexes[:5]
+            ]
+            entropy_fmt = [
+                f"{entropy[index]:.2f}"
+                for index in sorted_solution_indexes[:5]
+            ]
+            solution_list_fmt = ', '.join([
+                f"{s} ({e})"
+                for s, e
+                in zip(solutions_fmt, entropy_fmt)
+            ])
+            cont = '…' if len(sorted_solution_indexes) > 10 else ''
+            print(f"Possible solutions (n={num_solutions}): "
+                  f"{solution_list_fmt} {cont}")
 
-            print()
-            print("Top guesses:")
-            for i, index in enumerate(sorted_indexes):
-                if i >= 10:
-                    print('…')
-                    break
-                word = np.squeeze(corpus[index].view('U5'))
-                print(f'{str(word).upper()} ({entropy[index]:.2f} bits)')
+            guesses_fmt = [
+                f"{str(np.squeeze(corpus[index].view('U5'))).upper()}"
+                for index in sorted_indexes[:5]
+            ]
+            entropy_fmt = [
+                f"{entropy[index]:.2f}"
+                for index in sorted_indexes[:5]
+            ]
+            guess_list_fmt = ', '.join([
+                f"{s} ({e})"
+                for s, e
+                in zip(guesses_fmt, entropy_fmt)
+            ])
+            cont = '…' if len(sorted_indexes) > 10 else ''
+            print(f"Top guesses: "
+                  f"{guess_list_fmt} {cont}")
 
-        print()
         while True:
             suggested_guess_str = str(
                 np.squeeze(suggested_guess.view('U5'))
@@ -154,11 +173,15 @@ if __name__ == '__main__':
             if len(guess) == 5 and guess.isalpha():
                 guess = np.array([guess.lower()]).view('U1')
                 break
+            print("Enter a guess you would like to make, leaving it blank "
+                  "to accept the suggested guess in the brackets.")
         while True:
-            pattern = input("Pattern (0=black, 1=yellow, 2=green) ")
+            pattern = input("Pattern ")
             if len(pattern) == 5 and all(ch in '012' for ch in pattern):
                 pattern = int(pattern, base=3)
                 break
+            print("Enter a pattern as a 5-digit code with 0=black, 1=yellow "
+                  "2=green, e.g. 01200=black-yellow-green-black-black")
 
         if pattern == int('22222', base=3):
             break
@@ -170,3 +193,5 @@ if __name__ == '__main__':
             if patterns is None
             else patterns[mask]
         )
+
+        print()
